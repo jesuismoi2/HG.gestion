@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Hexagone Confluence — Espace Donneur d'ordre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Inter', sans-serif; background: #EEF1F5; color: #0F1F17; }
+  button { cursor: pointer; font-family: 'Inter', sans-serif; }
+  input, textarea, select { font-family: 'Inter', sans-serif; }
+  a { text-decoration: none; color: inherit; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #EEF1F5; }
+  ::-webkit-scrollbar-thumb { background: #C8D0CC; border-radius: 3px; }
+  @keyframes toastIn { from { opacity:0; transform:translateX(20px); } to { opacity:1; transform:translateX(0); } }
+  @keyframes fadeIn  { from { opacity:0; } to { opacity:1; } }
+  @keyframes slideUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// ============================================================
+// COULEURS
+// ============================================================
+const C = {
+  primary:     "#1A4731",
+  accent:      "#2D7A4F",
+  orange:      "#E8622A",
+  bg:          "#EEF1F5",
+  surface:     "#FFFFFF",
+  border:      "#E2E6ED",
+  text:        "#0F1F17",
+  textSec:     "#5A6A5F",
+  textMuted:   "#9AA89F",
+  star:        "#F5A623",
+  rouge:       "#C0392B",
+  rougeBg:     "#FDECEC",
+  jauneBg:     "#FEF9E7",
+  jaune:       "#D4A017",
+  encoursBg:   "#E8F5EE",
+  avenirBg:    "#F0EEFF",
+  avenirColor: "#6B5FBF",
+  validerBg:   "#FDF0EA",
+};
+
+// ============================================================
+// DONNÉES
+// ============================================================
+const MISSIONS_INIT = [
+  { id:1, trajet:"Reims → Lyon",          vehicule:"Peugeot 3008 · AB-123-CD",  societe:"Hexagone Confluence", date:"Aujourd'hui",  statut:"en_cours",    note:5,    montant:250 },
+  { id:2, trajet:"Paris → Bordeaux",      vehicule:"BMW Série 3 · CD-456-EF",    societe:"Hexagone Confluence", date:"07/06/2026",   statut:"a_valider",   note:4,    montant:310 },
+  { id:3, trajet:"Lyon → Marseille",      vehicule:"Renault Clio · EF-789-GH",   societe:"Hexagone Confluence", date:"03/06/2026",   statut:"reclamation", note:1,    montant:190 },
+  { id:4, trajet:"Lille → Nantes",        vehicule:"Audi A4 · GH-012-IJ",        societe:"Hexagone Confluence", date:"15/06/2026",   statut:"a_venir",     note:null, montant:280 },
+  { id:5, trajet:"Toulouse → Strasbourg", vehicule:"Mercedes GLC · IJ-345-KL",   societe:"Hexagone Confluence", date:"28/05/2026",   statut:"passee",      note:5,    montant:420 },
+];
+
+const PRESTATIONS_LIST = [
+  { key:"lavage",    icon:"🪣", label:"Lavage",              prix:30,  inclus:false },
+  { key:"plein",     icon:"⛽", label:"Plein carburant",      prix:25,  inclus:false },
+  { key:"docs",      icon:"📋", label:"Docs administratifs",  prix:0,   inclus:true  },
+  { key:"main",      icon:"🤝", label:"Mise en main",         prix:20,  inclus:false },
+  { key:"photos",    icon:"📸", label:"Photos véhicule",      prix:15,  inclus:false },
+  { key:"assurance", icon:"🛡️", label:"Assurance transport",  prix:45,  inclus:false },
+];
+
+const NAV = [
+  { section:"MISSIONS", items:[
+    { key:"dashboard",   icon:"📊", label:"Tableau de bord" },
+    { key:"en_cours",    icon:"🕐", label:"En cours",        badge:4, bc:C.accent },
+    { key:"terminees",   icon:"✅", label:"Terminées",       badge:2, bc:C.orange },
+    { key:"passees",     icon:"📋", label:"Passées" },
+    { key:"a_venir",     icon:"📅", label:"À venir",         badge:6, bc:C.accent },
+    { key:"nouvelle",    icon:"➕", label:"Nouvelle mission", accent:true },
+  ]},
+  { section:"GESTION", items:[
+    { key:"documents",   icon:"📄", label:"Documents" },
+    { key:"societes",    icon:"🏢", label:"Mes sociétés" },
+    { key:"facturation", icon:"💳", label:"Facturation" },
+    { key:"reclamations",icon:"⚠️", label:"Réclamations", badge:1, bc:C.rouge },
+  ]},
+  { section:"ADMINISTRATION", items:[
+    { key:"admins",      icon:"👤", label:"Gérer mes admins" },
+    { key:"parametres",  icon:"⚙️", label:"Paramètres" },
+  ]},
+];
+
+// ============================================================
+// ATOMES
+// ============================================================
+function Stars({ count, max=5 }) {
+  return (
+    <span style={{display:"inline-flex",gap:2}}>
+      {Array.from({length:max}).map((_,i)=>(
+        <span key={i} style={{color:i<count?C.star:"#DDE2E0",fontSize:13}}>★</span>
+      ))}
+    </span>
+  );
+}
+
+function Badge({ statut }) {
+  const MAP = {
+    en_cours:    { label:"● En cours",    bg:C.encoursBg, color:C.accent },
+    a_valider:   { label:"⏳ À valider",  bg:C.validerBg, color:C.orange },
+    reclamation: { label:"⚠ Réclamation", bg:C.rougeBg,   color:C.rouge  },
+    a_venir:     { label:"● À venir",     bg:C.avenirBg,  color:C.avenirColor },
+    passee:      { label:"✓ Passée",      bg:"#F0F2F0",   color:C.textMuted },
+  };
+  const s = MAP[statut] || MAP.passee;
+  return <span style={{display:"inline-flex",alignItems:"center",padding:"3px 10px",borderRadius:999,fontSize:11,fontWeight:600,background:s.bg,color:s.color,whiteSpace:"nowrap"}}>{s.label}</span>;
+}
+
+function Btn({ children, variant="primary", onClick, full=false, style={} }) {
+  const [hov, setHov] = useState(false);
+  const base = { display:"inline-flex", alignItems:"center", gap:6, padding:"9px 20px", borderRadius:8, fontSize:13, fontWeight:600, border:"none", cursor:"pointer", fontFamily:"'Inter',sans-serif", transition:"all 0.15s", whiteSpace:"nowrap", width:full?"100%":undefined, justifyContent:full?"center":undefined };
+  const V = {
+    primary: { background:hov?"#153A27":C.primary, color:"#fff" },
+    accent:  { background:hov?"#256040":C.accent,  color:"#fff" },
+    orange:  { background:hov?"#D4531F":C.orange,  color:"#fff" },
+    ghost:   { background:hov?C.bg:"transparent",  color:C.textSec, border:`1.5px solid ${C.border}` },
+    outline: { background:hov?C.primary:"transparent", color:hov?"#fff":C.primary, border:`1.5px solid ${C.primary}` },
+    danger:  { background:hov?"#a93226":C.rouge,   color:"#fff" },
+  };
+  return <button onClick={onClick} style={{...base,...V[variant],...style}} onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>{children}</button>;
+}
+
+function Field({ label, icon, value, onChange, placeholder, type="text", readOnly=false }) {
+  const [foc, setFoc] = useState(false);
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+      {label && <label style={{fontSize:13,fontWeight:600,color:C.text}}>{icon&&<span style={{marginRight:5}}>{icon}</span>}{label}</label>}
+      <input type={type} value={value} onChange={e=>onChange&&onChange(e.target.value)} placeholder={placeholder} readOnly={readOnly}
+        style={{padding:"10px 14px",border:`1.5px solid ${foc?C.accent:C.border}`,borderRadius:10,fontSize:13,color:C.text,outline:"none",background:readOnly?C.bg:C.surface,transition:"border-color 0.15s",width:"100%"}}
+        onFocus={()=>setFoc(true)} onBlur={()=>setFoc(false)}/>
+    </div>
+  );
+}
+
+function KpiCard({ label, value, sub, valueColor, subColor }) {
+  return (
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 22px",boxShadow:"0 1px 4px rgba(26,71,49,0.07)"}}>
+      <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>{label}</div>
+      <div style={{fontFamily:"'Syne',sans-serif",fontSize:36,fontWeight:700,color:valueColor||C.primary,lineHeight:1,marginBottom:6}}>{value}</div>
+      <div style={{fontSize:12,color:subColor||C.textMuted}}>{sub}</div>
+    </div>
+  );
+}
+
+function SectionTitle({ children }) {
+  return <h1 style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:700,color:C.primary,margin:0}}>{children}</h1>;
+}
+
+function Card({ children, style={} }) {
+  return <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,boxShadow:"0 1px 4px rgba(26,71,49,0.07)",overflow:"hidden",...style}}>{children}</div>;
+}
+
+function Toast({ msg, type }) {
+  return (
+    <div style={{position:"fixed",bottom:24,right:24,zIndex:600,background:C.text,color:"#fff",padding:"14px 20px",borderRadius:12,boxShadow:"0 8px 24px rgba(0,0,0,0.2)",fontSize:13,display:"flex",alignItems:"center",gap:10,borderLeft:`4px solid ${type==="success"?C.accent:type==="error"?C.rouge:C.jaune}`,maxWidth:340,animation:"toastIn 0.3s ease"}}>
+      <span style={{fontSize:16}}>{type==="success"?"✓":type==="error"?"✕":"⚠"}</span>
+      <span>{msg}</span>
+    </div>
+  );
+}
+
+function Placeholder({ title, icon }) {
+  return (
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:420,gap:16,animation:"fadeIn 0.3s ease"}}>
+      <div style={{fontSize:52}}>{icon}</div>
+      <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:22,fontWeight:700,color:C.primary}}>{title}</h2>
+      <p style={{color:C.textMuted,fontSize:14,textAlign:"center",maxWidth:320}}>Cette section sera codée dans la prochaine livraison.</p>
+    </div>
+  );
+}
+
+// ============================================================
+// SIDEBAR
+// ============================================================
+function Sidebar({ page, setPage }) {
+  return (
+    <aside style={{position:"fixed",top:0,left:0,width:240,height:"100vh",background:C.surface,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",zIndex:100,overflowY:"auto"}}>
+
+      {/* Logo */}
+      <div style={{padding:"20px 20px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <div style={{width:36,height:36,background:C.primary,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontFamily:"'Syne',sans-serif",fontWeight:700,fontSize:16,flexShrink:0}}>H</div>
+        <div>
+          <div style={{fontFamily:"'Syne',sans-serif",fontSize:13,fontWeight:700,color:C.primary,lineHeight:1.2}}>Hexagone<br/>Confluence</div>
+          <div style={{fontSize:10,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Convoyage</div>
+        </div>
+      </div>
+
+      {/* Nav */}
+      <nav style={{flex:1,padding:"8px 0"}}>
+        {NAV.map(sec => (
+          <div key={sec.section}>
+            <div style={{padding:"14px 20px 5px",fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.1em"}}>{sec.section}</div>
+            {sec.items.map(item => {
+              const active = page === item.key;
+              return (
+                <button key={item.key} onClick={() => setPage(item.key)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"9px 20px",width:"100%",border:"none",background:active?C.bg:"transparent",cursor:"pointer",fontFamily:"'Inter',sans-serif",fontSize:13,fontWeight:active?600:500,color:item.accent?C.accent:active?C.primary:C.textSec,textAlign:"left",position:"relative",transition:"all 0.15s"}}
+                  onMouseEnter={e=>{if(!active)e.currentTarget.style.background=C.bg}}
+                  onMouseLeave={e=>{if(!active)e.currentTarget.style.background="transparent"}}>
+                  {active && <div style={{position:"absolute",left:0,top:"50%",transform:"translateY(-50%)",width:3,height:"60%",background:C.accent,borderRadius:"0 2px 2px 0"}}/>}
+                  <span style={{fontSize:15,width:20,textAlign:"center",flexShrink:0}}>{item.icon}</span>
+                  <span style={{flex:1}}>{item.label}</span>
+                  {item.badge && <span style={{background:item.bc,color:"#fff",borderRadius:999,fontSize:11,fontWeight:700,minWidth:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",padding:"0 5px"}}>{item.badge}</span>}
+                </button>
+              );
+            })}
+          </div>
+        ))}
+      </nav>
+
+      {/* User */}
+      <div style={{padding:"14px 20px",borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <div style={{width:32,height:32,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>GD</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:600,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>Groupe Dupont Auto</div>
+          <div style={{fontSize:11,color:C.textMuted}}>Gérant</div>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+// ============================================================
+// TOPBAR
+// ============================================================
+function Topbar({ onNouvelle, showToast }) {
+  return (
+    <header style={{position:"fixed",top:0,left:240,right:0,height:64,background:C.surface,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 32px",zIndex:200,boxShadow:"0 1px 0 #E2E6ED"}}>
+      <span style={{fontSize:13,color:C.textMuted}}>
+        Connecté en tant que <strong style={{color:C.text}}>Groupe Dupont Auto</strong>
+      </span>
+      <div style={{display:"flex",alignItems:"center",gap:12}}>
+        <button onClick={()=>showToast("3 notifications en attente","success")}
+          style={{width:40,height:40,borderRadius:10,background:C.bg,border:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",position:"relative",fontSize:16,transition:"background 0.15s"}}
+          onMouseEnter={e=>e.currentTarget.style.background="#dde2e8"}
+          onMouseLeave={e=>e.currentTarget.style.background=C.bg}>
+          🔔
+          <span style={{position:"absolute",top:-4,right:-4,width:18,height:18,background:C.orange,color:"#fff",borderRadius:"50%",fontSize:10,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center"}}>3</span>
+        </button>
+        <Btn onClick={onNouvelle} style={{fontSize:12,padding:"7px 16px"}}>➕ Nouvelle mission</Btn>
+        <div style={{width:36,height:36,borderRadius:"50%",background:C.primary,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,cursor:"pointer"}}>GD</div>
+      </div>
+    </header>
+  );
+}
+
+// ============================================================
+// PAGE DASHBOARD
+// ============================================================
+function PageDashboard({ missions, onValider, onNouvelle, setPage }) {
+  const [tab, setTab] = useState("all");
+
+  const counts = {
+    en_cours:    missions.filter(m=>m.statut==="en_cours").length,
+    a_valider:   missions.filter(m=>m.statut==="a_valider").length,
+    a_venir:     missions.filter(m=>m.statut==="a_venir").length,
+    reclamation: missions.filter(m=>m.statut==="reclamation").length,
+  };
+
+  const filtered = tab==="all" ? missions : missions.filter(m=>m.statut===tab);
+  const rowBg = { a_valider:C.validerBg, reclamation:C.rougeBg };
+
+  const TABS = [
+    { key:"all",         label:"Toutes" },
+    { key:"en_cours",    label:"En cours",     count:counts.en_cours },
+    { key:"a_valider",   label:"À valider",    count:counts.a_valider },
+    { key:"a_venir",     label:"À venir",      count:counts.a_venir },
+    { key:"reclamation", label:"Réclamations", count:counts.reclamation },
+  ];
+
+  return (
+    <div style={{animation:"slideUp 0.3s ease"}}>
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:28}}>
+        <div>
+          <SectionTitle>Tableau de bord</SectionTitle>
+          <p style={{color:C.textMuted,fontSize:13,marginTop:4}}>Bienvenue, Groupe Dupont Auto · Lundi 9 juin 2026</p>
+        </div>
+        <Btn onClick={onNouvelle}>➕ Nouvelle mission</Btn>
+      </div>
+
+      {/* KPIs */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:14,marginBottom:28}}>
+        <KpiCard label="Missions ce mois"  value="47"                        sub="+12 vs mois dernier"       subColor={C.accent}/>
+        <KpiCard label="En cours"          value={String(counts.en_cours)}   sub={`${counts.en_cours} convoyeurs actifs`}/>
+        <KpiCard label="À valider"         value={String(counts.a_valider)}  sub="Missions terminées"        valueColor={C.orange}/>
+        <KpiCard label="Réclamations"      value={String(counts.reclamation)}sub="En cours de traitement"    valueColor={C.orange}/>
+      </div>
+
+      {/* Table */}
+      <Card>
+        <div style={{padding:"18px 24px 0",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <span style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:C.primary}}>Mes missions</span>
+          </div>
+          <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
+            {TABS.map(t => (
+              <button key={t.key} onClick={()=>setTab(t.key)}
+                style={{padding:"7px 14px",borderRadius:"8px 8px 0 0",fontSize:12,fontWeight:600,border:"none",cursor:"pointer",fontFamily:"'Inter',sans-serif",background:tab===t.key?C.primary:"transparent",color:tab===t.key?"#fff":C.textSec,display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"}}>
+                {t.label}
+                {t.count !== undefined && (
+                  <span style={{background:tab===t.key?"rgba(255,255,255,0.25)":C.bg,color:tab===t.key?"#fff":C.textMuted,borderRadius:999,padding:"1px 7px",fontSize:11}}>{t.count}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse"}}>
+            <thead>
+              <tr style={{background:C.bg}}>
+                {["Trajet","Société","Date","Statut","Note","Montant","Action"].map(h=>(
+                  <th key={h} style={{padding:"10px 20px",fontSize:11,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em",textAlign:"left",borderBottom:`1px solid ${C.border}`,whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(m => (
+                <tr key={m.id}
+                  style={{background:rowBg[m.statut]||C.surface,borderBottom:`1px solid ${C.border}`,transition:"background 0.1s"}}
+                  onMouseEnter={e=>{if(!rowBg[m.statut])e.currentTarget.style.background=C.bg}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=rowBg[m.statut]||C.surface}}>
+                  <td style={{padding:"14px 20px"}}>
+                    <div style={{fontWeight:700,color:C.primary,fontSize:13}}>{m.trajet}</div>
+                    <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>{m.vehicule}</div>
+                  </td>
+                  <td style={{padding:"14px 20px"}}>
+                    <div style={{fontSize:13,color:C.textSec,fontWeight:500}}>{m.societe}</div>
+                  </td>
+                  <td style={{padding:"14px 20px",fontSize:13,color:C.textSec,whiteSpace:"nowrap"}}>{m.date}</td>
+                  <td style={{padding:"14px 20px"}}><Badge statut={m.statut}/></td>
+                  <td style={{padding:"14px 20px"}}>
+                    {m.note ? <Stars count={m.note}/> : <span style={{color:C.textMuted}}>—</span>}
+                  </td>
+                  <td style={{padding:"14px 20px",fontWeight:700,color:C.primary,fontSize:13,whiteSpace:"nowrap"}}>{m.montant} € HT</td>
+                  <td style={{padding:"14px 20px"}}>
+                    {m.statut==="a_valider"   && <Btn variant="primary" style={{fontSize:12,padding:"6px 14px"}} onClick={()=>onValider(m)}>Valider →</Btn>}
+                    {m.statut==="reclamation" && <Btn variant="orange"  style={{fontSize:12,padding:"6px 14px"}} onClick={()=>setPage("reclamations")}>Suivre →</Btn>}
+                    {m.statut==="a_venir"     && <Btn variant="ghost"   style={{fontSize:12,padding:"6px 14px"}}>Modifier →</Btn>}
+                    {(m.statut==="en_cours"||m.statut==="passee") && <Btn variant="ghost" style={{fontSize:12,padding:"6px 14px"}}>Voir →</Btn>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={{padding:"12px 24px",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:12,color:C.textMuted}}>Affichage de {filtered.length} mission{filtered.length>1?"s":""} sur 47</span>
+          <button style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>Voir toutes les missions →</button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ============================================================
+// MODAL VALIDER
+// ============================================================
+function ModalValider({ mission, onClose, onConfirm }) {
+  const [note, setNote] = useState(5);
+  const [comment, setComment] = useState("");
+  const [foc, setFoc] = useState(false);
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(15,31,23,0.55)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:16,animation:"fadeIn 0.2s ease"}} onClick={onClose}>
+      <div style={{background:C.surface,borderRadius:20,boxShadow:"0 12px 48px rgba(26,71,49,0.2)",width:"100%",maxWidth:480,animation:"slideUp 0.25s ease"}} onClick={e=>e.stopPropagation()}>
+        <div style={{padding:"20px 24px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:C.primary}}>✅ Valider la livraison</span>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",fontSize:20,color:C.textMuted,lineHeight:1,padding:4}}>✕</button>
+        </div>
+        <div style={{padding:24}}>
+          <div style={{background:C.bg,borderRadius:10,padding:16,marginBottom:20}}>
+            <div style={{fontWeight:700,color:C.primary,marginBottom:6,fontSize:15}}>{mission.trajet}</div>
+            <div style={{fontSize:13,color:C.textSec}}>{mission.vehicule}</div>
+            <div style={{fontSize:13,color:C.textSec}}>{mission.societe} · {mission.date} · {mission.montant} € HT</div>
+          </div>
+          <div style={{marginBottom:20}}>
+            <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:10}}>⭐ Notez cette mission</div>
+            <div style={{display:"flex",gap:6}}>
+              {[1,2,3,4,5].map(n=>(
+                <button key={n} onClick={()=>setNote(n)}
+                  style={{fontSize:32,background:"none",border:"none",cursor:"pointer",color:n<=note?C.star:"#DDE2E0",transform:n<=note?"scale(1.1)":"scale(1)",transition:"all 0.1s",lineHeight:1,padding:2}}>★</button>
+              ))}
+            </div>
+            <div style={{fontSize:11,color:C.textMuted,marginTop:6}}>Note calculée selon le barème Hexagone Confluence.</div>
+          </div>
+          <div>
+            <label style={{fontSize:13,fontWeight:600,color:C.text,display:"block",marginBottom:6}}>Commentaire (optionnel)</label>
+            <textarea value={comment} onChange={e=>setComment(e.target.value)} placeholder="Tout s'est bien passé, livraison conforme..." rows={3}
+              style={{width:"100%",padding:"10px 14px",border:`1.5px solid ${foc?C.accent:C.border}`,borderRadius:10,fontSize:13,fontFamily:"'Inter',sans-serif",resize:"vertical",color:C.text,outline:"none",transition:"border-color 0.15s",background:C.surface}}
+              onFocus={()=>setFoc(true)} onBlur={()=>setFoc(false)}/>
+          </div>
+        </div>
+        <div style={{padding:"14px 24px",borderTop:`1px solid ${C.border}`,display:"flex",justifyContent:"flex-end",gap:10}}>
+          <Btn variant="ghost" onClick={onClose}>Annuler</Btn>
+          <Btn variant="primary" onClick={()=>onConfirm(note,comment)}>✓ Confirmer la validation</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// PAGE NOUVELLE MISSION
+// ============================================================
+function PageNouvelleMission({ onBack, showToast }) {
+  const [step, setStep]     = useState(1);
+  const [depart, setDepart] = useState("");
+  const [arrivee,setArrivee]= useState("");
+  const [date, setDate]     = useState("");
+  const [immat, setImmat]   = useState("");
+  const [prests, setPrests] = useState({ lavage:true, docs:true });
+  const [missionRef]        = useState(Math.floor(Math.random()*9000+1000));
+
+  const togglePrest = k => setPrests(p=>({...p,[k]:!p[k]}));
+
+  const prixBase   = 350;
+  const prixPrests = PRESTATIONS_LIST.filter(p=>prests[p.key]&&!p.inclus).reduce((a,p)=>a+p.prix,0);
+  const total      = prixBase + prixPrests;
+  const ttc        = (total*1.2).toFixed(2).replace(".",",");
+
+  const STEPS = ["Trajet","Prestations","Récapitulatif","Confirmation"];
+
+  const goNext = () => {
+    if(step===1 && (!depart||!arrivee||!date)){
+      showToast("Veuillez remplir le trajet et la date.", "error"); return;
+    }
+    if(step===3) showToast("Mission envoyée avec succès ! 🎉","success");
+    setStep(s=>Math.min(s+1,4));
+  };
+
+  return (
+    <div style={{maxWidth:820,margin:"0 auto",animation:"slideUp 0.3s ease"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:28}}>
+        <div>
+          <SectionTitle>Nouvelle mission</SectionTitle>
+          <p style={{color:C.textMuted,fontSize:13,marginTop:4}}>Renseignez les informations pour générer votre devis</p>
+        </div>
+        <Btn variant="ghost" onClick={onBack}>← Annuler</Btn>
+      </div>
+
+      {/* Stepper */}
+      <div style={{display:"flex",alignItems:"center",marginBottom:32}}>
+        {STEPS.map((label,i) => {
+          const n=i+1, done=n<step, active=n===step;
+          return (
+            <div key={n} style={{display:"flex",alignItems:"center",flex:n<STEPS.length?1:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                <div style={{width:32,height:32,borderRadius:"50%",background:done?C.accent:active?C.primary:"transparent",border:`2px solid ${done?C.accent:active?C.primary:C.border}`,color:done||active?"#fff":C.textMuted,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0,transition:"all 0.3s"}}>
+                  {done?"✓":n}
+                </div>
+                <span style={{fontSize:12,fontWeight:active?600:400,color:active?C.primary:C.textMuted,whiteSpace:"nowrap"}}>{label}</span>
+              </div>
+              {n<STEPS.length && <div style={{flex:1,height:2,background:done?C.accent:C.border,margin:"0 8px",transition:"background 0.3s"}}/>}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ÉTAPE 1 — TRAJET */}
+      {step===1 && (
+        <Card>
+          <div style={{padding:28}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:20}}>1. Informations du trajet</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+              <Field label="Adresse de départ" icon="📍" value={depart} onChange={setDepart} placeholder="1 rue de Lyon, 51100 Reims"/>
+              <Field label="Adresse d'arrivée" icon="📍" value={arrivee} onChange={setArrivee} placeholder="14 avenue Foch, 13008 Marseille"/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+              <Field label="Date de départ souhaitée" icon="📅" type="date" value={date} onChange={setDate}/>
+              <Field label="Immatriculation" icon="🚗" value={immat} onChange={v=>setImmat(v.toUpperCase())} placeholder="AB123CD"/>
+            </div>
+            {depart && arrivee && (
+              <div style={{display:"inline-flex",alignItems:"center",gap:12,background:C.bg,border:`1.5px solid ${C.accent}`,borderRadius:999,padding:"8px 20px",marginBottom:4}}>
+                <span style={{fontSize:13,color:C.textSec}}>🔧 Distance calculée :</span>
+                <span style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:700,color:C.accent}}>412 km</span>
+                <span style={{color:C.textMuted}}>—</span>
+                <span style={{fontSize:13,color:C.textMuted}}>Tranche : <strong style={{color:C.primary}}>400–500 km</strong></span>
+              </div>
+            )}
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:20,marginTop:20,display:"flex",justifyContent:"flex-end"}}>
+              <Btn onClick={goNext}>Suivant : Prestations →</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ÉTAPE 2 — PRESTATIONS */}
+      {step===2 && (
+        <Card>
+          <div style={{padding:28}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:20}}>2. Prestations souhaitées</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:20}}>
+              {PRESTATIONS_LIST.map(p => {
+                const sel = prests[p.key];
+                return (
+                  <div key={p.key} onClick={()=>togglePrest(p.key)}
+                    style={{border:`1.5px solid ${sel?C.accent:C.border}`,background:sel?C.encoursBg:C.surface,borderRadius:10,padding:16,cursor:"pointer",transition:"all 0.15s",position:"relative",userSelect:"none"}}>
+                    {sel && <div style={{position:"absolute",top:10,right:10,width:18,height:18,background:C.accent,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:10,fontWeight:700}}>✓</div>}
+                    <div style={{fontSize:22,marginBottom:6}}>{p.icon}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>{p.label}</div>
+                    <div style={{fontSize:12,fontWeight:700,color:p.inclus?C.textMuted:C.accent}}>{p.inclus?"Inclus":`+${p.prix} €`}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:20,display:"flex",justifyContent:"space-between"}}>
+              <Btn variant="ghost" onClick={()=>setStep(1)}>← Retour</Btn>
+              <Btn onClick={goNext}>Voir le récapitulatif →</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ÉTAPE 3 — RÉCAPITULATIF */}
+      {step===3 && (
+        <Card>
+          <div style={{padding:28}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.accent,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:20}}>3. Récapitulatif & devis</div>
+            <div style={{background:C.bg,borderRadius:10,padding:16,marginBottom:20}}>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:20,fontWeight:700,color:C.primary}}>{depart||"Reims"} → {arrivee||"Marseille"} · 412 km</div>
+              <div style={{fontSize:13,color:C.textSec,marginTop:4}}>{date||"15 juin 2026"} · Hexagone Confluence · Convoyage sur route</div>
+            </div>
+            <div style={{border:`1.5px solid ${C.border}`,borderRadius:10,overflow:"hidden",marginBottom:20}}>
+              <div style={{display:"flex",justifyContent:"space-between",padding:"12px 16px",borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.textSec}}>
+                <span>Convoyage {depart||"Reims"} → {arrivee||"Marseille"} (412 km)</span>
+                <strong style={{color:C.text}}>{prixBase} € HT</strong>
+              </div>
+              {PRESTATIONS_LIST.filter(p=>prests[p.key]).map(p=>(
+                <div key={p.key} style={{display:"flex",justifyContent:"space-between",padding:"12px 16px",borderBottom:`1px solid ${C.border}`,fontSize:13,color:C.textSec}}>
+                  <span>{p.label}</span>
+                  <strong style={{color:p.inclus?C.accent:C.text}}>{p.inclus?"Inclus":`+${p.prix} € HT`}</strong>
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",padding:"16px 16px",borderTop:`2px solid ${C.primary}`}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:"0.08em"}}>Total estimé</div>
+                  <div style={{fontSize:11,color:C.textMuted,marginTop:2}}>Soit {ttc} € TTC</div>
+                </div>
+                <div style={{fontFamily:"'Syne',sans-serif",fontSize:32,fontWeight:700,color:C.primary}}>{total} € HT</div>
+              </div>
+            </div>
+            <div style={{background:C.jauneBg,border:`1px solid ${C.jaune}`,borderRadius:10,padding:14,fontSize:13,color:C.textSec,marginBottom:20}}>
+              <strong style={{color:"#8B6914"}}>⚠️ Conditions d'annulation :</strong><br/>
+              À plus de 48h : <strong>gratuite</strong> · Entre 24h et 48h : <strong>30%</strong> · Le jour J : <strong>60%</strong>
+            </div>
+            <div style={{borderTop:`1px solid ${C.border}`,paddingTop:20,display:"flex",justifyContent:"space-between"}}>
+              <Btn variant="ghost" onClick={()=>setStep(2)}>← Retour</Btn>
+              <Btn onClick={goNext}>✓ Valider et envoyer la mission</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      {/* ÉTAPE 4 — CONFIRMATION */}
+      {step===4 && (
+        <Card>
+          <div style={{padding:"48px 28px",textAlign:"center"}}>
+            <div style={{fontSize:56,marginBottom:16}}>✅</div>
+            <h2 style={{fontFamily:"'Syne',sans-serif",fontSize:28,fontWeight:700,color:C.primary,marginBottom:12}}>Mission envoyée !</h2>
+            <p style={{fontSize:14,color:C.textSec,maxWidth:440,margin:"0 auto 24px"}}>
+              Votre mission a bien été transmise à Hexagone Confluence. Vous recevrez une confirmation par email dès qu'un convoyeur sera assigné.
+            </p>
+            <div style={{display:"inline-flex",alignItems:"center",gap:12,background:C.bg,border:`1.5px solid ${C.border}`,borderRadius:12,padding:"12px 24px",marginBottom:32}}>
+              <span style={{fontSize:13,color:C.textMuted}}>Référence :</span>
+              <strong style={{fontFamily:"'Syne',sans-serif",fontSize:20,color:C.primary}}>#HC-2026-{missionRef}</strong>
+            </div>
+            <div style={{display:"flex",gap:12,justifyContent:"center",flexWrap:"wrap"}}>
+              <Btn variant="outline" onClick={()=>showToast("📄 Bon de commande — génération PDF à brancher","success")}>📄 Télécharger le bon de commande</Btn>
+              <Btn onClick={onBack}>Retour au tableau de bord →</Btn>
+            </div>
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// APP
+// ============================================================
+function App() {
+  const [page,     setPage]     = useState("dashboard");
+  const [missions, setMissions] = useState(MISSIONS_INIT);
+  const [modal,    setModal]    = useState(null);
+  const [toast,    setToast]    = useState(null);
+
+  function showToast(msg, type="success") {
+    setToast({msg, type});
+    setTimeout(()=>setToast(null), 3500);
+  }
+
+  function handleValider(note) {
+    setMissions(ms => ms.map(m => m.id===modal.id ? {...m, statut:"passee", note} : m));
+    setModal(null);
+    showToast("Mission validée avec succès ! 🎉");
+  }
+
+  const goNouvelle = () => setPage("nouvelle");
+
+  const PAGES = {
+    dashboard:   <PageDashboard missions={missions} onValider={setModal} onNouvelle={goNouvelle} setPage={setPage}/>,
+    nouvelle:    <PageNouvelleMission onBack={()=>setPage("dashboard")} showToast={showToast}/>,
+    en_cours:    <Placeholder title="Missions en cours"   icon="🕐"/>,
+    terminees:   <Placeholder title="Missions terminées"  icon="✅"/>,
+    passees:     <Placeholder title="Missions passées"    icon="📋"/>,
+    a_venir:     <Placeholder title="Missions à venir"    icon="📅"/>,
+    documents:   <Placeholder title="Documents"           icon="📄"/>,
+    societes:    <Placeholder title="Mes sociétés"        icon="🏢"/>,
+    facturation: <Placeholder title="Facturation"         icon="💳"/>,
+    reclamations:<Placeholder title="Réclamations"        icon="⚠️"/>,
+    admins:      <Placeholder title="Gérer mes admins"    icon="👤"/>,
+    parametres:  <Placeholder title="Paramètres"          icon="⚙️"/>,
+  };
+
+  return (
+    <div style={{display:"flex",minHeight:"100vh",fontFamily:"'Inter',sans-serif",background:C.bg}}>
+      <Sidebar page={page} setPage={p=>{setPage(p);}}/>
+      <div style={{flex:1,marginLeft:240}}>
+        <Topbar onNouvelle={goNouvelle} showToast={showToast}/>
+        <main style={{padding:"80px 32px 48px"}}>
+          {PAGES[page] || <Placeholder title={page} icon="🔧"/>}
+        </main>
+      </div>
+      {modal  && <ModalValider mission={modal} onClose={()=>setModal(null)} onConfirm={handleValider}/>}
+      {toast  && <Toast msg={toast.msg} type={toast.type}/>}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
